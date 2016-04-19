@@ -17,7 +17,11 @@ class Renderer(object):
 
     def render(self):
         for point in self.points:
-            self.display.blit(self.pointRes, point)
+            x, y, z = point
+            x = x/z + 320
+            y = y/z + 320
+            self.pointRes.fill((max(min(255//z, 255), 0), 0, 255))
+            self.display.blit(self.pointRes, (x,y))
             
 
     def run(self):
@@ -27,7 +31,7 @@ class Renderer(object):
             pygame.display.flip()
             time.sleep(self.renderDelay)
 
-    def start(self, points):
+    def start(self):
         self.endRun = False
         t = threading.Thread(target=self.run)
         t.start()
