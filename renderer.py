@@ -1,4 +1,5 @@
 import pygame, threading, time
+import numpy as np
 
 class Renderer(object):
     def __init__(self,points=None, displaySize=(800,600), renderDelay=0.01):
@@ -18,11 +19,11 @@ class Renderer(object):
     def render(self):
         for point in self.points:
             x, y, z = point
-            x = x/z + 320
-            y = y/z + 320
-            self.pointRes.fill((max(min(255//z, 255), 0), 0, 255))
+            x = x/(1 + z/35) + 320
+            y = y/(1 + z/35) + 320
+            if x == np.inf or x == -np.inf or y == np.inf or y == -np.inf: x,y = 1000, 1000
+            self.pointRes.fill((max(min(255 - (25 * z), 255), 0), 255, 255))
             self.display.blit(self.pointRes, (x,y))
-            
 
     def run(self):
         while not self.endRun:

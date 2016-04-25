@@ -7,10 +7,10 @@ from math import sqrt
 class Flocker(object):
 	def __init__(self, time=time):
 		self.time = time
-		self.flockRadius = 100
+		self.flockRadius = 50
 		self.centerWeight = 1 / 100
 		self.alignWeight  = 1 / 8
-		self.avoidDist  = 10
+		self.avoidDist  = 3
 
 	def flock(self, space):
 		self.space = space
@@ -42,13 +42,41 @@ class Flocker(object):
 					if distance <= self.avoidDist:
 						avoidSpeed -= (boid2 - boid1)
 
-				barycenter = localPosSum / flockSize
-				centerSpeed = (barycenter - boid1) * self.centerWeight
+				if flockSize != 0:
+					barycenter = localPosSum / flockSize
+					centerSpeed = (barycenter - boid1) * self.centerWeight
 
-				meanLocalSpeed = localSpeedSum / flockSize
-				alignSpeed = (meanLocalSpeed - speed1) * self.alignWeight
+					meanLocalSpeed = localSpeedSum / flockSize
+					alignSpeed = (meanLocalSpeed - speed1) * self.alignWeight
+				else:
+					centerSpeed = 0
+					alignSpeed = 0
 
-				self.speed[i] =  speed1 + centerSpeed + alignSpeed + avoidSpeed
+				boundingSpeedRate = 1
+				boundingSpeed =  np.array([0,0,0])
+				x, y, z = self.space[i]
+				if z != -35:
+					x = x / (1 + z / 35) + 320
+					y = y / (1 + z / 35) + 320
+				else:
+					x = 1000
+					y = 1000
+
+				if z >= 5: boundingSpeed[-1] = -boundingSpeedRate
+				elif z < 0.5: boundingSpeed[-1] = boundingSpeedRate
+				if  x >= 750: boundingSpeed[0] = -boundingSpeedRate
+				elif x <= 50: boundingSpeed[0] = boundingSpeedRate
+				if y >= 550: boundingSpeed[1] = -boundingSpeedRate
+				elif y <= 50: boundingSpeed[1] = boundingSpeedRate
+
+
+
+				newSpeed = speed1 + centerSpeed + alignSpeed + avoidSpeed + boundingSpeed
+				if newSpeed.sum() > 10:
+					newSpeed /= newSpeed.max()
+					newSpeed *= 10
+
+				self.speed[i] = newSpeed
 				self.space[i] = boid1 + self.speed[i]
 
 			self.time.sleep(0.1)
@@ -73,10 +101,13 @@ class Flocker(object):
 class MatricialFlocker(object):
 	def __init__(self, time=time):
 		self.time = time
-		self.flockRadius = 100
+		self.flockRadius = 10000
 		self.centerWeight = 1 / 100
-		self.alignWeight  = 1 / 8
-		self.avoidDist  = 10
+		self.alignWeight  = 1 / 2
+		self.avoidWeight = 1 / 200
+		self.avoidDist  = 20
+		self.bounds = [[50, 750], [50, 550], [0.5, 1.5]]
+		self.defaultBoundingSpeed = 3
 
 	def center(self, space, distances):
 		#Space is a vector of points, we get a matrix by repeating it along its depth
@@ -96,7 +127,7 @@ class MatricialFlocker(object):
 		localCount = (distances <= self.avoidDist).sum(axis=1)
 		localSum = spaceMatrix.sum(axis=1)
 		#Calc speed to reach baricenters
-		speed = - (localSum - space * localCount[:, None])
+		speed = - (localSum - space * localCount[:, None]) * self.avoidWeight
 		return speed
 
 	def align(self, space, distances):
@@ -109,6 +140,27 @@ class MatricialFlocker(object):
 		speed = (meanLocalSpeed - self.speed) * self.alignWeight
 		return speed
 
+	def bind(self, space):
+		renderedPos = space.copy()
+		renderedPos[:, 2][renderedPos[:, 2] == -35] = -35.1
+		renderedPos[:, :2] /= renderedPos[:, 2][:, None] / 35 + 1 
+		renderedPos[:, :2] += 320
+
+		x, y, z = self.bounds
+		boundingSpeed = np.zeros(space.shape)
+		#bind x
+		boundingSpeed[:, 0][renderedPos[:, 0] > x[1]] = -self.defaultBoundingSpeed
+		boundingSpeed[:, 0][renderedPos[:, 0] < x[0]] = self.defaultBoundingSpeed
+		#bind y
+		boundingSpeed[:, 1][renderedPos[:, 1] > y[1]] = -self.defaultBoundingSpeed
+		boundingSpeed[:, 1][renderedPos[:, 1] < y[0]] = self.defaultBoundingSpeed
+		#bind z
+		boundingSpeed[:, 2][renderedPos[:, 2] > z[1]] = -self.defaultBoundingSpeed
+		boundingSpeed[:, 2][renderedPos[:, 2] < z[0]] = self.defaultBoundingSpeed
+
+		return boundingSpeed
+
+
 	def flock(self, space):
 		self.space = space
 		self.speed = np.zeros(space.shape)
@@ -118,9 +170,22 @@ class MatricialFlocker(object):
 			centerSpeed = self.center(space, distances)
 			avoidSpeed = self.avoid(space, distances)
 			alignSpeed = self.align(space, distances)
+			boundingSpeed = self.bind(space)
+			
+			newSpeed = self.speed + centerSpeed  + alignSpeed + avoidSpeed + boundingSpeed
+			newSpeed /= abs(newSpeed).max(axis=1)[:, None]
+			newSpeed *= 5
+			
 
-			self.speed += centerSpeed  + alignSpeed + avoidSpeed
+			self.speed = newSpeed 
 			self.space += self.speed
+
+
+
+
+
+
+
 			#print(self.speed)
 			self.time.sleep(0.01)
 
