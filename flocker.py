@@ -94,7 +94,11 @@ class Flocker(object):
 
 
 
-
+#This is more of an exercise on numpy indexing and mental visualisation of
+#matricial operations rather than a practical way to implement flocking IMO, 
+#for anything above 100 boids I would just implement it in C and import it,
+#I actually did that a while back but I don't know what I did with that module
+# ... ¯\_(ツ)_/¯
 
 
 
@@ -104,8 +108,8 @@ class MatricialFlocker(object):
 		self.flockRadius = 10000
 		self.centerWeight = 1 / 100
 		self.alignWeight  = 1 / 2
-		self.avoidWeight = 1 / 200
-		self.avoidDist  = 20
+		self.avoidWeight = 1
+		self.avoidDist  = 200
 		self.bounds = [[50, 750], [50, 550], [0.5, 1.5]]
 		self.defaultBoundingSpeed = 3
 
@@ -125,9 +129,13 @@ class MatricialFlocker(object):
 		#Set position of non local points to 0 so they don't get counted
 		spaceMatrix[distances > self.avoidDist] = 0
 		localCount = (distances <= self.avoidDist).sum(axis=1)
-		localSum = spaceMatrix.sum(axis=1)
+		vectorsMatrix = space[:, None] - space[:, None].swapaxes(0,1)
+		distances[distances == 0] = 1
+		vectorsMatrix = vectorsMatrix / distances[:, :, None]
+		vectorsMatrix[distances > self.avoidDist] = 0
+		localSum = vectorsMatrix.sum(axis=1) / localCount[:, None]
 		#Calc speed to reach baricenters
-		speed = - (localSum - space * localCount[:, None]) * self.avoidWeight
+		speed = - localSum  * self.avoidWeight
 		return speed
 
 	def align(self, space, distances):
