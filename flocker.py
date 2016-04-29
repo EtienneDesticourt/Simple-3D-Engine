@@ -103,9 +103,9 @@ class Flocker(object):
 
 
 class MatricialFlocker(object):
-	def __init__(self, time=time):
+	def __init__(self, flockRadius, time=time):
 		self.time = time
-		self.flockRadius = 10000
+		self.flockRadius = flockRadius
 		self.centerWeight = 1 / 100
 		self.alignWeight  = 1 / 2
 		self.avoidWeight = 1
@@ -113,14 +113,29 @@ class MatricialFlocker(object):
 		self.bounds = [[50, 750], [50, 550], [0.5, 1.5]]
 		self.defaultBoundingSpeed = 3
 
+	def calcDistances(self, space):
+		return cdist(space, space)
+
+
 	def center(self, space, distances):
 		#Space is a vector of points, we get a matrix by repeating it along its depth
 		spaceMatrix = np.repeat(space[None, :], space.shape[0], axis=0)
 		#Set position of non local points to 0 so they don't get counted
 		spaceMatrix[distances > self.flockRadius] = 0
-		baricenters = spaceMatrix.sum(axis=1) / space.shape[0]
+
+		#Count number of boids inside flock
+		localCount = (distances <= self.flockRadius).sum(axis=0) - 1 #remove self from count
+		localCount = localCount.astype(np.float32)
+		localCount[localCount == 0] = 0.5 #avoid division by 0, we put it at 0.5 so it's clearly non-sensical and can be singled out later
+
+		#Calc barycenter
+		barycenters = (spaceMatrix.sum(axis=1) - space) / localCount[:, None]  #don't include self in barycenter
+
 		#Calc speed to reach baricenters
-		speed = (baricenters - space) * self.centerWeight
+		speed = barycenters - space
+		#Put speed of boids with no flock to 0 so it's not equal to -space
+		speed[localCount == 0.5] = 0 #Remember 0.5 from when we avoided dividing by 0 when there was nobody in the flock, not very gracious but eh
+
 		return speed
 
 	def avoid(self, space, distances):
@@ -174,8 +189,8 @@ class MatricialFlocker(object):
 		self.speed = np.zeros(space.shape)
 		while self.keepFlocking:
 			#We get the distance between each point and every other point (matrix)
-			distances = cdist(space, space)
-			centerSpeed = self.center(space, distances)
+			distances = self.calcDistances(space)
+			centerSpeed = self.center(space, distances) * self.centerWeight
 			avoidSpeed = self.avoid(space, distances)
 			alignSpeed = self.align(space, distances)
 			boundingSpeed = self.bind(space)
